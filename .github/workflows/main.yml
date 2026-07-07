@@ -32,7 +32,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/build" -w /build root670/docker-psxsdk sh -c '
             set -e
-            apk add --no-cache unzip >/dev/null
+            apk add --no-cache unzip gcc musl-dev >/dev/null
             unzip -o 240pTestSuite-PS1-master.zip -d _bundled
             mkdir -p textures resources tools
             cp _bundled/textures/*.bmp textures/
