@@ -15,29 +15,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract bundled assets and host tools
+      - name: Build with PSXSDK (Docker)
+        # root670/docker-psxsdk (Alpine/musl-based) bundles psx-gcc, elf2exe,
+        # systemcnf, mkisofs and mkpsxiso, which is exactly what this
+        # Makefile needs.
+        #
         # This repo doesn't check in top-level textures/, resources/, or
         # tools/ folders -- they're bundled inside 240pTestSuite-PS1-master.zip
         # instead. The .exe files in there are prebuilt Windows binaries, so
         # rather than use them we rebuild the 4 needed host-side tools from
-        # their bundled C sources for Linux (the .exe suffix is just a
-        # filename here, not a platform indicator -- Linux doesn't care).
+        # their bundled C sources. That compile step -- and the unzip -- has
+        # to happen *inside* this same Alpine container (not on the Ubuntu
+        # runner), otherwise the resulting binaries are glibc-linked and
+        # fail with "Command not found" when this musl-based image tries to
+        # exec them.
         run: |
-          unzip -o 240pTestSuite-PS1-master.zip -d _bundled
-          mkdir -p textures resources tools
-          cp _bundled/textures/*.bmp textures/
-          cp _bundled/resources/beep.wav resources/
-          gcc -O2 -o tools/bin2c.exe        _bundled/tools/bin2c.c
-          gcc -O2 -o tools/bmp2tim.exe      _bundled/tools/bmp2tim.c
-          gcc -O2 -o tools/wav2vag.exe      _bundled/tools/wav2vag.c -lm
-          gcc -O2 -o tools/lz4compress.exe  _bundled/tools/lz4compress.c lz4.c lz4hc.c
-          chmod +x tools/*.exe
-
-      - name: Build with PSXSDK (Docker)
-        # root670/docker-psxsdk bundles psx-gcc, elf2exe, systemcnf,
-        # mkisofs and mkpsxiso, which is exactly what this Makefile needs.
-        run: |
-          docker run --rm -v "$PWD:/build" root670/docker-psxsdk make
+          docker run --rm -v "$PWD:/build" -w /build root670/docker-psxsdk sh -c '
+            set -e
+            apk add --no-cache unzip >/dev/null
+            unzip -o 240pTestSuite-PS1-master.zip -d _bundled
+            mkdir -p textures resources tools
+            cp _bundled/textures/*.bmp textures/
+            cp _bundled/resources/beep.wav resources/
+            gcc -O2 -o tools/bin2c.exe        _bundled/tools/bin2c.c
+            gcc -O2 -o tools/bmp2tim.exe      _bundled/tools/bmp2tim.c
+            gcc -O2 -o tools/wav2vag.exe      _bundled/tools/wav2vag.c -lm
+            gcc -O2 -o tools/lz4compress.exe  _bundled/tools/lz4compress.c lz4.c lz4hc.c
+            chmod +x tools/*.exe
+            make
+          '
 
       - name: Show build output
         run: ls -laR binary
